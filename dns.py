@@ -1,19 +1,6 @@
 from scapy.all import *
 from arp import * 
-
-
-def get_mac_address(ip):
-    """
-    Get the mac address of some IP
-    """
-    try:
-        packet = Ether(dst="ff:ff:ff:ff:ff:ff")/ARP(pdst=ip)
-        resp, unans = srp(packet, timeout=2, verbose=False)
-        if resp:
-            return resp[0][1].hwsrc
-    except Exception as e:
-        print("Error getting MAC address for %s: %s" % (ip, e))
-    return None
+from helper import *
 
 def set_ip_forwarding(ip_forwarding):
     """
