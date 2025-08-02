@@ -77,21 +77,15 @@ class arp:
         self.ip2 = ip2
         self.iface = iface
         
-        def spoof_thread(ip1, ip2, interval):
-            while not self.stop_event.is_set():
-                arp.send_spoof_packet(ip1, ip2, iface)
-                arp.send_spoof_packet(ip2, ip1, iface)
-                if self.stop_event.wait(interval):
-                    break
-            arp.restore_arp_table(self.ip1, self.ip2, self.iface)
-            arp.restore_arp_table(self.ip2, self.ip1, self.iface)
+        while not self.stop_event.is_set():
+            arp.send_spoof_packet(ip1, ip2, iface)
+            arp.send_spoof_packet(ip2, ip1, iface)
+            if self.stop_event.wait(interval):
+                break
+        
+        arp.restore_arp_table(self.ip1, self.ip2, self.iface)
+        arp.restore_arp_table(self.ip2, self.ip1, self.iface)
             
-        
-        thread = threading.Thread(target=spoof_thread, args=(ip1, ip2, interval))
-        thread.daemon = True
-        thread.start()
-        
-        return thread
         
     def stop_spoof(self):
         print("Stopping ARP spoof")
