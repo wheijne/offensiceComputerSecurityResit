@@ -87,7 +87,14 @@ class arp:
         arp.restore_arp_table(self.ip2, self.ip1, self.iface)
             
         
-    def stop_spoof(self):
+    def stop(self):
         print("Stopping ARP spoof")
         self.stop_event.set()
+    
+    def start(self, target_ip, spoofed_ip, interval, interface):
+        self.stop_event.clear()
+        if interval != 0:
+            self.continuous_arp_spoof(target_ip, spoofed_ip, interval, interface)
+        else:
+            self.silent_arp_spoof(target_ip, spoofed_ip, interface)
         

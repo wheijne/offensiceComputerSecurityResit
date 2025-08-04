@@ -1,13 +1,15 @@
 import Tkinter as tk
 from arp import *
 from dns import *
+from sslstrip import *
+from page import *
 import threading
 
 class GUI:
     def __init__(self):
         root = tk.Tk()
         root.title("ARP and DNS spoofer and SSL stripper")
-        root.geometry("600x400")
+        root.geometry("800x400")
         root.resizable(False, False)
         
         self.frames = {}
@@ -28,6 +30,8 @@ class GUI:
         page_container.pack(side="top", fill="both", expand=True)
         page_container.grid_rowconfigure(0, weight=1)
         page_container.grid_columnconfigure(0, weight=1)
+        
+        
         
         front = FrontPage(page_container)
         self.frames["Front"] = front
@@ -72,88 +76,55 @@ class FrontPage(tk.Frame):
         tk.Label(self, text="Click on any of the buttons above to go to one of the tools").pack(expand=True)
         tk.Label(self, text="Created by Wout Heijne, 1712675, for course 2IC80").pack(expand=True)
         
-        
-        
-class ARPFrame(tk.Frame):
+
+class ARPFrame(page):
     def __init__(self, parent):
-        tk.Frame.__init__(self, parent)
-        self.thread = None
-        
-        tk.Label(self, text="ARP spoofing", font=("Helvetica", 14, "bold")).pack()
+        page.__init__(self, parent, "ARP spoofing", arp())
+        self.start_text = "Starting ARP spoof on %s as %s every %d seconds on interface %s"
+    
+    def add_info_labels(self):
         label(self, "Spoof a target in one of two modes:")
         label(self, "Continuous: send spoofing packets at an interval")
         label(self, "Silent: only send spoofing packets when an ARP request occurs")
         label(self, "Enter an interval for continuous, leave interval empty for silent")
-        self.interface = text_and_input(self, "Interface:")
-        vcmd_ip = (self.register(validate_ip), '%P')
-        self.target_ip = text_and_input(self, "Target IP:")
-        self.target_ip.config(validate="key", validatecommand=vcmd_ip)
+        
+    def add_entries(self):
+        page.add_entries(self)
         self.spoofed_ip = text_and_input(self, "Spoof as IP:")
-        self.spoofed_ip.config(validate="key", validatecommand=vcmd_ip)
+        self.spoofed_ip.config(validate="key", validatecommand=self.vcmd_ip)
         self.interval = text_and_input(self, "Interval:")
-        vcmd_number = (self.register(validate_number), '%P')
-        self.interval.config(validate="key", validatecommand=vcmd_number)
-        self.start_button = button(self, "Start", self.handle_start)
-        self.stop_button = button(self, "Stop", self.handle_stop)
-        self.stop_button.config(state="disabled")
-        self.info_label = label(self, "")
+        self.interval.config(validate="key", validatecommand=self.vcmd_number)
     
-    def handle_start(self):
+    def get_and_validate_inputs(self):
         target_ip = self.target_ip.get()
         spoofed_ip = self.spoofed_ip.get()
         interface = self.interface.get()
         interval = self.interval.get()
-        
-        if target_ip == '' or spoofed_ip == '' or interface == '':
-            self.info_label.config(text="Please set the inputs for interface and target and spoof IP")
+        if interval == '':
+            interval = "0"
+                
+        if not len(target_ip.split('.')) == 4 or target_ip.split('.')[3] == '' \
+           or not len(spoofed_ip.split('.')) == 4 or target_ip.split('.')[3] == '' \
+           or interface == '':
             return
         
-        if self.thread and self.thread.is_alive():
-            self.info_label.config(text="An ARP spoof is already running, please stop it first")
-            
-        self.start_button.config(state="disabled")
-        self.arp1 = arp()
-        
-        if not interval == "":
-            self.info_label.config(text="ARP spoof of %s to %s every %s seconds started" % (spoofed_ip, target_ip, interval))
-            self.thread = threading.Thread(target=self.arp1.continuous_arp_spoof, args=(str(target_ip), str(spoofed_ip), float(interval), str(interface)))
-            self.thread.start()
-        else:
-            self.info_label.config(text="Silent ARP spoof of %s to %s started" % (spoofed_ip, target_ip))
-            self.thread = threading.Thread(target=self.arp1.silent_arp_spoof, args=(target_ip, spoofed_ip, interface))
-            self.thread.start()
-        
-        self.stop_button.config(state="normal")
-            
-    def handle_stop(self):
-        self.stop_button.config(state="disabled")
-        self.arp1.stop_spoof()
-        self.thread.join()
-        self.info_label.config(text="ARP spoof stopped")
-        self.start_button.config(state="normal")
-       
+        return (target_ip, spoofed_ip, int(interval), interface)
 
-class DNSFrame(tk.Frame):
+class DNSFrame(page):
     def __init__(self, parent):
-        tk.Frame.__init__(self, parent)
-        self.config(bg="#FFE4E1")
+        page.__init__(self, parent, "DNS spoofing", dns())
+        self.start_text = "Started DNS spoof on interface %s and %s, sending %s to %s"
         
-        vcmd = (self.register(validate_ip), '%P')
-        
-        tk.Label(self, text="ARP spoofing", font=("Helvetica", 14, "bold")).pack()
+    def add_info_labels(self):
         label(self, "Spoof the domain to the spoofed IP, for the target IP")
-        self.interface = text_and_input(self, "Interface:")
-        self.target_ip = text_and_input(self, "Target IP:")
-        self.target_ip.config(validate="key", validatecommand=vcmd)
-        self.spoofed_ip = text_and_input(self, "Spoofed IP:")
-        self.spoofed_ip.config(validate="key", validatecommand=vcmd)
-        self.domain = text_and_input(self, "Domain:")
-        self.start_button = button(self, "Start", self.handle_start)
-        self.stop_button = button(self, "Stop", self.handle_stop)
-        self.stop_button.config(state="disabled")
-        self.info_label = label(self, "")
         
-    def handle_start(self):
+    def add_entries(self):
+        page.add_entries(self)
+        self.spoofed_ip = text_and_input(self, "Spoofed IP:")
+        self.spoofed_ip.config(validate="key", validatecommand=self.vcmd_ip)
+        self.domain = text_and_input(self, "Domain:")
+        
+    def get_and_validate_inputs(self):
         target_ip = self.target_ip.get()
         spoofed_ip = self.spoofed_ip.get()
         interface = self.interface.get()
@@ -162,69 +133,33 @@ class DNSFrame(tk.Frame):
         if not len(target_ip.split('.')) == 4 or target_ip.split('.')[3] == '' \
            or not len(spoofed_ip.split('.')) == 4 or target_ip.split('.')[3] == '' \
            or interface == '' or domain == '':
-            self.info_label.config(text="Please check you inputs")
-            
-        self.start_button.config(state="disabled")
+            return
         
-        self.dns1 = dns()
-        self.info_label.config(text="Started DNS spoof pretending %s is at %s for %s" % (domain, spoofed_ip, target_ip))
-        self.thread = threading.Thread(target=self.dns1.spoof, args=(interface, domain, target_ip, spoofed_ip))
-        self.thread.start()
-        self.stop_button.config(state="normal")
-        
-    
-    def handle_stop(self):
-        self.stop_button.config(state="disabled")
-        self.dns1.stop_spoof()
-        self.thread.join()
-        self.start_button.config(state="disabled")
-        self.info_label.config(text="DNS spoof stopped")
-        
-class SSLFrame(tk.Frame):
+        return (interface, domain, target_ip, spoofed_ip)
+ 
+ 
+class SSLFrame(page):
     def __init__(self, parent):
-        tk.Frame.__init__(self, parent)
-        self.config(bg="#E0FFFF")
+        page.__init__(self, parent, "SSL stripping", sslstrip())
+        self.start_text = "Started SSL stripping for %s on interface %s"
         
-def label(parent, text):
-    lbl = tk.Label(parent, text=text)
-    lbl.pack(fill="x")    
-    return lbl
-    
-def text_and_input(parent, text):
-    container = tk.Frame(parent)
-    tk.Label(container, text=text, width=20).pack(side="left")
-    entry = tk.Entry(container, width=20)
-    entry.pack(side="left")
-    container.pack()
-    return entry
+    def add_info_labels(self):
+        label(self, "Start an SSL stripping attack at the victim")
+        label(self, "Requests are saved in \"%s/request\"" % os.getcwd())
+        label(self, "Responses are saved in \"%s/response\"" % os.getcwd())
+        
+    def add_entries(self):
+        page.add_entries(self)
+        
+    def get_and_validate_inputs(self):
+        target_ip = self.target_ip.get()
+        interface = self.interface.get()
+        
+        print("target_ip='%s', interface='%s'" % (target_ip, interface))
+        
+        if not len(target_ip.split('.')) == 4 or target_ip.split('.')[3] == '' or interface == '':
+            return
+        
+        return (target_ip, interface)
 
-def button(parent, text, handler):
-    btn = tk.Button(parent, text=text, command=handler)
-    btn.pack()
-    return btn
-    
-def validate_number(text):
-    if text == "":
-        return True
-    decimal_count = text.count(".")
-    if decimal_count > 1:
-        return False
-    if text.replace('.', '', 1).isdigit():
-        return True
-    return False
-    
-def validate_ip(text):
-    if text == "":
-        return True
-    splitted = text.split(".")
-    if len(splitted) > 4:
-        return False
-    for i, t in enumerate(splitted):
-        if t == '' and i == len(splitted) - 1:
-            break
-        if not t.isdigit():
-            return False
-        n = int(t)
-        if n > 255 or n < 0:
-            return False
-    return True
+

