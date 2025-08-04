@@ -1,3 +1,5 @@
 .python-version
 venv
 *.pyc
+/response
+/request
