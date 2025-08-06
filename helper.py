@@ -23,4 +23,5 @@ def run_iptables_command(command):
         print("error executing command: '%s', manually add or remove rule" % command)
         raise
     except Exception as e:
+        print("error executing command: '%s': %s" % (command, e))
         raise
