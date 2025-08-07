@@ -3,3 +3,4 @@ venv
 *.pyc
 /response
 /request
+/processed_response
