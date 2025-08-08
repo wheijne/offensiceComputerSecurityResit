@@ -9,7 +9,7 @@ class GUI:
     def __init__(self):
         root = tk.Tk()
         root.title("ARP and DNS spoofer and SSL stripper")
-        root.geometry("800x400")
+        root.geometry("800x300")
         root.resizable(False, False)
         
         self.frames = {}
